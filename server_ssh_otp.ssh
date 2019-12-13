@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+token=""
+# Authenticate to Vault
+vault login $token
+
+# Enable secret engine at path otp for otp based secrets
+vault secrets enable -path otp ssh
+
+# create role for generating otp secrets
+vault write otp/roles/otp_key_role key_type=otp \
+        default_user=ubuntu \
+        cidr_list=0.0.0.0/0
+
+#Create user to be able to read secrets
+echo '
+#path "sys/mounts" {
+#  capabilities = ["list","read"]
+#}
+#path "otp/roles/otp_key_role" {
+#  capabilities = ["create", "update"]
+path "sys/mounts" {
+  capabilities = [ "read", "update" ]
+}
+
+# To configure the SSH secrets engine
+path "otp/*" {
+  capabilities = [ "create", "read", "update", "delete", "list" ]
+}
+
+# To enable secrets engines
+path "sys/mounts/*" {
+  capabilities = [ "create", "read", "update", "delete" ]
+}' | vault policy write user -
+
+vault auth enable userpass
+vault write auth/userpass/users/rambabu password=test policies=user
+
+echo "
+You can now generate otp using following commands
+vault login -method=userpass username=rambabu password=test
+vault write otp/creds/otp_key_role ip=<IP of ssh server>
+"
